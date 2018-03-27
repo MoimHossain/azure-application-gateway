@@ -1,0 +1,308 @@
+{
+    "$schema": "https://schema.management.azure.com/schemas/2015-01-01/deploymentTemplate.json#",
+    "contentVersion": "1.0.0.0",
+    "parameters": {
+        "vnetName": {
+            "type": "string"
+        },
+        "appGatewayName": {
+            "type": "string"
+        },
+        "azureWebsiteFqdn": {
+            "type": "string"
+        },
+        "frontendCertificateData": {
+            "type": "string"
+        },
+        "frontendCertificatePassword": {
+            "type": "string"
+        },
+        "backendCertificateData": {
+            "type": "string"
+        }
+    },
+    "variables": {
+        "gatewaySubnetName": "Gatewaysubnet",
+        "gatewayIPAddressName": "[concat('pip', parameters('appGatewayName'))]",
+        "gatewayIPConfigName": "[concat('ipConf', parameters('appGatewayName'))]",
+        "probeName": "[concat('probe', parameters('appGatewayName'))]",
+        "backendPoolName": "[concat('backendPool', parameters('appGatewayName'))]",
+        "backendPoolSettingsName": "[concat('poolSettigs', parameters('appGatewayName'))]",
+        "sslRouteRuleName": "[concat('routeRule', parameters('appGatewayName'))]",
+        "hostSSLCertificateName": "hostSSLCertificate",
+        "backendCertificateName": "whitelistedCertificate",
+        "frontEndIPConfig": "[concat('fipConf', parameters('appGatewayName'))]",
+        "sslListeningPort": "[concat('sslPort', parameters('appGatewayName'))]",
+        "sslListenerName": "[concat('sslListener', parameters('appGatewayName'))]",
+        "http80portName": "[concat('httpPort', parameters('appGatewayName'))]",
+        "httpListenerName": "[concat('httpListener', parameters('appGatewayName'))]",
+        "gatewayResID": "[resourceId('Microsoft.Network/applicationGateways', parameters('appGatewayName'))]",
+        "backendCertificateData": "[parameters('backendCertificateData')]",
+        "certPassword": "[parameters('frontendCertificatePassword')]",
+        "certData": "[parameters('frontendCertificateData')]"
+    },
+    "resources": [
+        {
+            "comments": "Virtual Network that will host the Application Gateway.",
+            "type": "Microsoft.Network/virtualNetworks",
+            "name": "[parameters('vnetName')]",
+            "apiVersion": "2017-10-01",
+            "location": "[resourceGroup().Location]",
+            "tags": {
+                "Business Unit": "Damco",
+                "Self Managed": "Yes"
+            },
+            "properties": {
+                "addressSpace": {
+                    "addressPrefixes": [
+                        "10.0.0.0/16"
+                    ]
+                },
+                "subnets": [
+                    {
+                        "name": "[variables('gatewaySubnetName')]",
+                        "properties": {
+                            "addressPrefix": "10.0.0.0/24"
+                        }
+                    }
+                ],
+                "virtualNetworkPeerings": [],
+                "enableDdosProtection": false,
+                "enableVmProtection": false
+            },
+            "dependsOn": []
+        },
+        {
+            "comments": "The Public IP Address for the Application Gateway.",
+            "type": "Microsoft.Network/publicIPAddresses",
+            "sku": {
+                "name": "Basic"
+            },
+            "name": "[variables('gatewayIPAddressName')]",
+            "apiVersion": "2017-10-01",
+            "location": "[resourceGroup().Location]",
+            "tags": {
+                "Business Unit": "Damco",
+                "Self Managed": "Yes"
+            },
+            "properties": {
+                "publicIPAddressVersion": "IPv4",
+                "publicIPAllocationMethod": "Dynamic",
+                "idleTimeoutInMinutes": 4
+            },
+            "dependsOn": []
+        },
+        {
+            "comments": "Application Gateway instance",
+            "type": "Microsoft.Network/applicationGateways",
+            "name": "[parameters('appGatewayName')]",
+            "apiVersion": "2017-10-01",
+            "location": "[resourceGroup().Location]",
+            "tags": {
+                "Business Unit": "Damco",
+                "Self Managed": "Yes"
+            },
+            "scale": null,
+            "properties": {
+                "sku": {
+                    "name": "WAF_Medium",
+                    "tier": "WAF",
+                    "capacity": 2
+                },
+                "gatewayIPConfigurations": [
+                    {
+                        "name": "[variables('gatewayIPConfigName')]",
+                        "properties": {
+                            "subnet": {
+                                "id": "[resourceId('Microsoft.Network/virtualNetworks/subnets', parameters('vnetName'), variables('gatewaySubnetName'))]"
+                            }
+                        }
+                    }
+                ],
+                "sslCertificates": [
+                    {
+                        "name": "[variables('hostSSLCertificateName')]",
+                        "properties": {
+                            "data": "[variables('certData')]",
+                            "password": "[variables('certPassword')]"
+                        }
+                    }
+                ],
+                "authenticationCertificates": [
+                    {
+                        "name": "[variables('backendCertificateName')]",
+                        "properties": {
+                            "data": "[variables('backendCertificateData')]"
+                        }
+                    }
+                ],
+                "frontendIPConfigurations": [
+                    {
+                        "name": "[variables('frontEndIPConfig')]",
+                        "properties": {
+                            "privateIPAllocationMethod": "Dynamic",
+                            "publicIPAddress": {
+                                "id": "[resourceId('Microsoft.Network/publicIPAddresses', variables('gatewayIPAddressName'))]"
+                            }
+                        }
+                    }
+                ],
+                "frontendPorts": [
+                    {
+                        "name": "[variables('sslListeningPort')]",
+                        "properties": {
+                            "port": 443
+                        }
+                    },
+                    {
+                        "name": "[variables('http80portName')]",
+                        "properties": {
+                            "port": 80
+                        }
+                    }
+                ],
+                "backendAddressPools": [
+                    {
+                        "name": "[variables('backendPoolName')]",
+                        "properties": {
+                            "backendAddresses": [
+                                {
+                                    "fqdn": "[parameters('azureWebsiteFqdn')]"
+                                }
+                            ]
+                        }
+                    }
+                ],
+                "backendHttpSettingsCollection": [
+                    {
+                        "name": "[variables('backendPoolSettingsName')]",
+                        "properties": {
+                            "provisioningState": "Succeeded",
+                            "port": 443,
+                            "protocol": "Https",
+                            "cookieBasedAffinity": "Disabled",
+                            "pickHostNameFromBackendAddress": true,
+                            "requestTimeout": 120,
+                            "probe": {
+                                "id": "[concat(variables('gatewayResID'), '/probes/', variables('probeName') )]"
+                            },
+                            "authenticationCertificates": [
+                                {
+                                    "id": "[concat(variables('gatewayResID'), '/authenticationCertificates/', variables('backendCertificateName'))]"
+                                }
+                            ]
+                        }
+                    }
+                ],
+                "httpListeners": [
+                    {
+                        "name": "[variables('sslListenerName')]",
+                        "properties": {
+                            "frontendIPConfiguration": {
+                                "id": "[concat(variables('gatewayResID'), '/frontendIPConfigurations/', variables('frontEndIPConfig'))]"
+                            },
+                            "frontendPort": {
+                                "id": "[concat(variables('gatewayResID'), '/frontendPorts/', variables('sslListeningPort'))]"
+                            },
+                            "protocol": "Https",
+                            "sslCertificate": {
+                                "id": "[concat(variables('gatewayResID'), '/sslCertificates/', variables('hostSSLCertificateName'))]"
+                            },
+                            "requireServerNameIndication": false
+                        }
+                    },
+                    {
+                        "name": "[variables('httpListenerName')]",
+                        "properties": {
+                            "frontendIPConfiguration": {
+                                "id": "[concat(variables('gatewayResID'), '/frontendIPConfigurations/', variables('frontEndIPConfig'))]"
+                            },
+                            "frontendPort": {
+                                "id": "[concat(variables('gatewayResID'), '/frontendPorts/', variables('http80portName'))]"
+                            },
+                            "protocol": "Http",
+                            "requireServerNameIndication": false
+                        }
+                    }
+                ],
+                "urlPathMaps": [],
+                "requestRoutingRules": [
+                    {
+                        "name": "[variables('sslRouteRuleName')]",
+                        "properties": {
+                            "ruleType": "Basic",
+                            "httpListener": {
+                                "id": "[concat(variables('gatewayResID'), '/httpListeners/', variables('sslListenerName'))]"
+                            },
+                            "backendAddressPool": {
+                                "id": "[concat(variables('gatewayResID'), '/backendAddressPools/', variables('backendPoolName') )]"
+                            },
+                            "backendHttpSettings": {
+                                "id": "[concat(variables('gatewayResID'), '/backendHttpSettingsCollection/', variables('backendPoolSettingsName') )]"
+                            }
+                        }
+                    },
+                    {
+                        "name": "redirectRuleHttpToHttps",
+                        "properties": {
+                            "ruleType": "Basic",
+                            "httpListener": {
+                                "id": "[concat(variables('gatewayResID'), '/httpListeners/', variables('httpListenerName'))]"
+                            },
+                            "redirectConfiguration": {
+                                "id": "[concat(variables('gatewayResID'), '/redirectConfigurations/', 'redirectHttptoHttps')]"
+                            }
+                        }
+                    }
+                ],
+                "probes": [
+                    {
+                        "name": "[variables('probeName')]",
+                        "properties": {
+                            "provisioningState": "Succeeded",
+                            "protocol": "Https",
+                            "path": "/",
+                            "interval": 30,
+                            "timeout": 120,
+                            "unhealthyThreshold": 3,
+                            "pickHostNameFromBackendHttpSettings": true,
+                            "minServers": 0,
+                            "match": {
+                                "statusCodes": [
+                                    "200-399"
+                                ]
+                            }
+                        }
+                    }
+                ],
+                "webApplicationFirewallConfiguration": {
+                    "enabled": "true",
+                    "firewallMode": "Prevention",
+                    "disabledRuleGroups": []
+                },
+                "redirectConfigurations": [
+                    {
+                        "name": "redirectHttptoHttps",
+                        "properties": {
+                            "redirectType": "Permanent",
+                            "targetListener": {
+                                "id": "[concat(variables('gatewayResID'), '/httpListeners/', variables('httpListenerName'))]"
+                            },
+                            "includePath": true,
+                            "includeQueryString": true,
+                            "requestRoutingRules": [
+                                {
+                                    "id": "[concat(variables('gatewayResID'), '/requestRoutingRules/', 'redirectRuleHttpToHttps')]"
+                                }
+                            ]
+                        }
+                    }
+                ]
+            },
+            "dependsOn": [
+                "[resourceId('Microsoft.Network/virtualNetworks', parameters('vnetName'))]",
+                "[resourceId('Microsoft.Network/publicIPAddresses', variables('gatewayIPAddressName'))]"
+            ]
+        }
+    ]
+}
