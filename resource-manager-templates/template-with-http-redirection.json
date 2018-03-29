@@ -81,10 +81,7 @@
             "name": "[variables('gatewayIPAddressName')]",
             "apiVersion": "2017-10-01",
             "location": "[resourceGroup().Location]",
-            "tags": {
-                "Business Unit": "Damco",
-                "Self Managed": "Yes"
-            },
+      
             "properties": {
                 "publicIPAddressVersion": "IPv4",
                 "publicIPAllocationMethod": "Dynamic",
